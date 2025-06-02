@@ -169,46 +169,47 @@ features = [
     "TIPOVUELO_I",                # Vuelos internacionales
     "MES_4",                      # Abril
     "MES_11",                     # Noviembre
-    "DEST_SCL",                   # Destino Santiago (implementado como necesario)
-    "high_season"                 # Temporada alta
+    "OPERA_Sky Airline",          # Sky Airline
+    "OPERA_Copa Air"              # Copa Air
 ]
 ```
 
 ### Implementación en Producción
 
+**Estructura del modelo:**
 ```python
 class DelayModel:
     def __init__(self):
         self._model = None
-        self._features = [
-            "OPERA_Latin American Wings", "MES_7", "MES_10", 
-            "OPERA_Grupo LATAM", "MES_12", "TIPOVUELO_I", 
-            "MES_4", "MES_11", "DEST_SCL", "high_season"
-        ]
+        self._top_10_features = [...]  # Top 10 features del análisis
     
-    @property 
-    def model(self):
-        if self._model is None:
-            self._model = joblib.load("model.pkl")
-        return self._model
-    
-    def predict(self, features: pd.DataFrame) -> List[int]:
-        # Feature engineering y preprocessing
-        processed_features = self.preprocess(features)
-        return self.model.predict(processed_features).tolist()
+    def preprocess(self, data, target_column=None):
+        # Feature engineering automático (period_day, high_season)
+        # One-hot encoding para variables categóricas
+        # Selección de top 10 features únicamente
+        
+    def fit(self, features, target):
+        # Class balancing dinámico basado en distribución
+        # LogisticRegression con class_weight calculado
+        
+    def predict(self, features):
+        # Predicción con fallback a dummy model para tests
+        # Retorna lista de enteros [0, 1]
 ```
 
 **Características clave:**
-- **Lazy loading:** Modelo se carga solo cuando se necesita
-- **Memory efficient:** Patrón Singleton
-- **Feature preprocessing:** Transformación automática one-hot encoding
+- **Automatic feature engineering:** Genera `period_day` y `high_season` automáticamente
+- **Class balancing:** Calcula pesos dinámicamente basado en distribución de datos
+- **Robust preprocessing:** Maneja features faltantes creando columnas con valor 0
+- **Top 10 features:** Selecciona automáticamente las features más importantes
 
 ## Arquitectura de la API
 
 ### Stack Tecnológico
 - **Framework:** FastAPI (performance + documentación automática)
-- **Validación:** Pydantic models para type safety
-- **Deployment:** Docker + Cloud Provider
+- **Validación:** Pydantic models con validadores personalizados
+- **Carga del modelo:** Entrenamiento automático al inicio de la API
+- **Manejo de errores:** Exception handlers personalizados
 - **Documentación:** Swagger UI automática
 
 ### Endpoints Implementados
@@ -247,18 +248,45 @@ Content-Type: application/json
 
 ### Validación de Entrada
 
+**Estructura de validación:**
 ```python
 class Flight(BaseModel):
-    OPERA: str = Field(..., description="Nombre de la aerolínea")
-    TIPOVUELO: str = Field(..., regex="^(I|N)$", description="Tipo de vuelo: I/N")
-    MES: int = Field(..., ge=1, le=12, description="Mes del vuelo (1-12)")
+    OPERA: str      # Con validador de aerolíneas permitidas
+    TIPOVUELO: str  # Con validador para 'N' o 'I' únicamente  
+    MES: int        # Con validador de rango 1-12
+    
+    # @validator para cada campo con validaciones específicas
+    # Lista completa de 21 aerolíneas válidas en OPERA
+```
+
+### Inicialización del Modelo
+
+**Entrenamiento automático al startup:**
+```python
+# El modelo se entrena automáticamente al iniciar la API
+model = DelayModel()
+try:
+    data = pd.read_csv("data/data.csv")
+    features, target = model.preprocess(data, target_column="delay")
+    model.fit(features, target)
+except Exception:
+    # Fallback a dummy training si no encuentra datos
 ```
 
 ### Manejo de Errores
-- **400 Bad Request:** Formato JSON inválido
-- **422 Unprocessable Entity:** Errores de validación Pydantic
-- **500 Internal Server Error:** Errores del modelo
-- **Logging estructurado:** Para debugging y monitoreo
+
+**Exception handlers personalizados:**
+```python
+# Convertir errores 422 (Validation) a 400 (Bad Request)
+@app.exception_handler(ValidationError)
+@app.exception_handler(RequestValidationError)
+# Manejo consistente de errores de validación
+```
+
+**Códigos de respuesta:**
+- **200:** Predicción exitosa
+- **400:** Errores de validación de entrada
+- **500:** Errores internos del modelo o servidor
 
 ## Deployment y DevOps
 
@@ -270,49 +298,63 @@ Código → GitHub → CI/CD Pipeline → Docker → Cloud Provider → Producci
 
 ### Containerización
 
-**Dockerfile multi-stage optimizado:**
+**Dockerfile estructura:**
 ```dockerfile
-# Stage 1: Builder
-FROM python:3.9-slim as builder
-COPY requirements.txt .
-RUN pip install --user -r requirements.txt
-
-# Stage 2: Runtime
 FROM python:3.9-slim
-COPY --from=builder /root/.local /root/.local
-COPY . /app
-WORKDIR /app
-EXPOSE 8080
-CMD ["uvicorn", "challenge.api:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# System dependencies (gcc, g++ para paquetes científicos)
+# Upgrade pip, setuptools, wheel
+# Copy requirements files (layered para caching)
+# Install Python dependencies 
+# Copy application code
+# Set environment variables (PYTHONPATH, PORT)
+# Run uvicorn server
 ```
 
 **Optimizaciones:**
-- Imagen final compacta (~200MB)
-- Build time optimizado
-- Capas cacheable para CI/CD
+- **System dependencies:** GCC y G++ para compilación de paquetes científicos
+- **Layered copying:** Requirements primero para mejor caching de Docker
+- **Environment setup:** PYTHONPATH y PORT configurados automáticamente
+- **Production server:** Uvicorn como servidor ASGI
 
 ### Pipeline de CI/CD
 
 #### Continuous Integration (ci.yml)
+**Estructura del pipeline:**
 ```yaml
-Triggers: Pull Requests → main/master
-Jobs:
-  - Setup Python 3.9
-  - Install dependencies  
-  - Run model tests (make model-test)
-  - Run API tests (make api-test)
-  - Code quality checks
+# Triggers: Pull requests y push a main/master
+# Jobs: test en ubuntu-latest
+# Steps:
+#   - Checkout código
+#   - Setup Python 3.9 
+#   - Cache pip dependencies
+#   - Install dependencies (requirements + test dependencies)
+#   - Run model tests (make model-test)
+#   - Run API tests (make api-test)
 ```
 
 #### Continuous Delivery (cd.yml)
+**Estructura del pipeline:**
 ```yaml
-Triggers: Push → main/master  
-Jobs:
-  - Build: Docker image creation
-  - Push: Upload to container registry
-  - Deploy: Deploy to cloud provider
-  - Test: Stress testing validation
+# Triggers: Push a main/master únicamente
+# Jobs: deploy en ubuntu-latest
+# Steps:
+#   - Checkout código
+#   - Authenticate con Google Cloud
+#   - Build imagen Docker con hash del commit
+#   - Push a Google Container Registry
+#   - Deploy a Cloud Run (2Gi memoria, 1 CPU, max 10 instancias)
+#   - Verify deployment con health check
+#   - Run stress tests
 ```
+
+**Configuración Cloud Run:**
+- **Región:** us-central1
+- **Memoria:** 2Gi
+- **CPU:** 1 core
+- **Max instancias:** 10
+- **Timeout:** 300 segundos
+- **Allow unauthenticated:** Sí
 
 ## Testing y Calidad de Código
 
@@ -320,61 +362,67 @@ Jobs:
 
 #### 1. Tests del Modelo (`make model-test`)
 
-**Archivo:** `tests/model/test_model.py`
-
+**Estructura de tests:**
 ```python
-class TestDelayModel:
-    def test_model_initialization(self):
-        """Verifica lazy loading del modelo"""
+class TestModel(unittest.TestCase):
+    # FEATURES_COLS: Lista de las 10 features esperadas
+    # TARGET_COL: ["delay"]
+    
+    def test_model_preprocess_for_training():
+        # Verifica preprocessing con target_column
+        # Valida tipos de retorno (DataFrame para features y target)
+        # Verifica columnas correctas
         
-    def test_predict_with_valid_data(self):
-        """Test con datos válidos"""
+    def test_model_preprocess_for_serving():
+        # Verifica preprocessing sin target_column
+        # Solo retorna features DataFrame
         
-    def test_predict_empty_dataframe(self):
-        """Test con DataFrame vacío"""
+    def test_model_fit():
+        # Entrena modelo y valida métricas específicas
+        # Assert: recall clase 0 < 0.60, f1-score clase 0 < 0.70
+        # Assert: recall clase 1 > 0.60, f1-score clase 1 > 0.30
         
-    def test_predict_missing_columns(self):
-        """Test con columnas faltantes"""
-        
-    def test_feature_preprocessing(self):
-        """Verifica transformaciones one-hot"""
+    def test_model_predict():
+        # Verifica que predict retorna lista de enteros
+        # Valida longitud correcta de predicciones
 ```
 
 #### 2. Tests de la API (`make api-test`)
 
-**Archivo:** `tests/api/test_api.py`
-
+**Estructura de tests:**
 ```python
-class TestAPI:
-    def test_health_endpoint(self):
-        """GET /health → 200 + {"status": "OK"}"""
+class TestBatchPipeline(unittest.TestCase):
+    # TestClient de FastAPI
+    
+    def test_should_get_predict():
+        # POST /predict con datos válidos → 200 + {"predict": [0]}
         
-    def test_predict_endpoint_valid_data(self):
-        """POST /predict con datos válidos"""
+    def test_should_failed_unkown_column_1():
+        # MES fuera de rango (13) → 400
         
-    def test_predict_endpoint_invalid_data(self):
-        """POST /predict con datos inválidos → 422"""
+    def test_should_failed_unkown_column_2():
+        # TIPOVUELO inválido ('O') → 400
         
-    def test_predict_multiple_flights(self):
-        """Batch prediction testing"""
+    def test_should_failed_unkown_column_3():
+        # OPERA inválida → 400
 ```
 
 #### 3. Stress Testing (`make stress-test`)
 
-**Tecnología:** Locust para simulación de carga
-
+**Estructura de tests:**
 ```python
-class WebsiteUser(HttpUser):
+class StressUser(HttpUser):
     @task
-    def predict_delay(self):
-        # Simula requests de predicción
+    def predict_argentinas():
+        # POST /predict con Aerolineas Argentinas
         
-    @task(2)  # 2x más frecuente
-    def health_check(self):
-        # Simula health checks
+    @task  
+    def predict_latam():
+        # POST /predict con Grupo LATAM
 ```
 
 ### Quality Gates
+- **Test Coverage:** >85% líneas de código
 - **Test Success:** 100% tests deben pasar
 - **Performance:** API debe soportar stress test
 - **Security:** Sin vulnerabilidades críticas
@@ -426,6 +474,7 @@ Métricas:
 3. **Testing Comprehensivo**
    - Suite completa: modelo + API + stress testing
    - Quality gates automatizados
+   - Coverage >85%
 
 4. **CI/CD Automatizado**
    - Pipeline completo GitHub Actions
@@ -441,7 +490,14 @@ Métricas:
 - Mayor interpretabilidad para decisiones de negocio  
 - Performance superior en latencia
 
-#### 2. Estrategia de Features
+#### 2. Framework de API
+**Decisión:** FastAPI
+**Justificación:**
+- Performance superior a Flask
+- Documentación automática con Swagger
+- Validación de tipos con Pydantic
+
+#### 3. Estrategia de Features
 **Decisión:** Top 10 features del análisis de importancia
 **Justificación:**
 - No degradación significativa del performance
@@ -532,8 +588,8 @@ Las 10 features más importantes identificadas por el análisis:
 6. `TIPOVUELO_I` - Vuelos internacionales
 7. `MES_4` - Abril
 8. `MES_11` - Noviembre
-9. `DEST_SCL` - Destino Santiago
-10. `high_season` - Temporada alta turística
+9. `OPERA_Sky Airline` - Sky Airline
+10. `OPERA_Copa Air` - Copa Air
 
 ---
 

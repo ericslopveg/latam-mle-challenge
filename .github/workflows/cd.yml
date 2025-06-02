@@ -1,0 +1,53 @@
+name: 'Continuous Delivery'
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+        
+    - name: Configure Docker for GCP
+      run: |
+        gcloud auth configure-docker
+        
+    - name: Build Docker image
+      run: |
+        docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/latam-challenge-api:${{ github.sha }} .
+        docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/latam-challenge-api:latest .
+        
+    - name: Push Docker image to GCR
+      run: |
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/latam-challenge-api:${{ github.sha }}
+        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/latam-challenge-api:latest
+        
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy latam-challenge-api \
+          --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/latam-challenge-api:${{ github.sha }} \
+          --platform managed \
+          --region us-central1 \
+          --allow-unauthenticated \
+          --memory 2Gi \
+          --cpu 1 \
+          --port 8080 \
+          --max-instances 10 \
+          --timeout 300
+          
+    - name: Verify deployment
+      run: |
+        sleep 30
+        curl -f https://latam-challenge-api-857517539350.us-central1.run.app/health || exit 1

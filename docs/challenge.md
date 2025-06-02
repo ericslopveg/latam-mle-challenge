@@ -130,9 +130,9 @@ Métricas:
 
 #### Ventajas Técnicas:
 1. **Balance Precision/Recall Óptimo**
-   - Recall competitivo (69%) para detectar retrasos
-   - Precision aceptable (25%) para minimizar falsas alarmas
-   - F1-score balanceado (36%)
+   - Recall competitivo (69%) detectas 7 de cada 10 retrasos
+   - Precision baja (25%) genera 3 falsas alarmas por cada retraso real
+   - F1-score (36%) refleja la priorización del recall.
 
 2. **Interpretabilidad**
    - Coeficientes lineales fáciles de interpretar
@@ -140,7 +140,7 @@ Métricas:
    - Importante para decisiones operacionales en aviación
 
 3. **Robustez en Producción**
-   - Menos prone a overfitting que XGBoost
+   - Menor riesgo de sobreajuste que XGBoost
    - Comportamiento más predecible
    - Generalización estable
 
@@ -422,7 +422,6 @@ class StressUser(HttpUser):
 ```
 
 ### Quality Gates
-- **Test Coverage:** >85% líneas de código
 - **Test Success:** 100% tests deben pasar
 - **Performance:** API debe soportar stress test
 - **Security:** Sin vulnerabilidades críticas
@@ -446,10 +445,10 @@ Métricas:
 ```
 
 ### Interpretación de Negocio
-- **69% de retrasos detectados** (alta sensibilidad)
-- **25% de alarmas son verdaderas** (falsos positivos controlados)
-- **Balance adecuado** para operaciones aeroportuarias
-- **Prioriza detección** sobre precisión (contexto de aviación)
+- **69% de retrasos detectados** - Identifica la mayoría de retrasos reales
+- **25% de alarmas verdaderas** - 3 de cada 4 alertas son falsas alarmas
+- **Estrategia preventiva** - Prioriza detectar retrasos sobre precisión de alertas
+- **Valor operacional** - Falsas alarmas son manejables, retrasos no detectados son costosos
 
 ### Performance de la API
 - **Latencia promedio:** <100ms
@@ -474,7 +473,6 @@ Métricas:
 3. **Testing Comprehensivo**
    - Suite completa: modelo + API + stress testing
    - Quality gates automatizados
-   - Coverage >85%
 
 4. **CI/CD Automatizado**
    - Pipeline completo GitHub Actions
@@ -486,7 +484,6 @@ Métricas:
 #### 1. Selección del Modelo
 **Decisión:** Regresión Logística con balanceado de clases
 **Justificación:** 
-- Mejor balance recall/precision para contexto aeroportuario
 - Mayor interpretabilidad para decisiones de negocio  
 - Performance superior en latencia
 

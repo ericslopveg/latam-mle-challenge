@@ -59,6 +59,7 @@ jobs:
           --platform managed \
           --region us-central1 \
           --allow-unauthenticated \
+          --service-account latam-challenge-ci@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
           --memory 2Gi \
           --cpu 1 \
           --port 8080 \

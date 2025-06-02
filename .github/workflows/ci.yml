@@ -34,21 +34,11 @@ jobs:
         pip install -r requirements-dev.txt
         pip install -r requirements-test.txt
         
+    - name: Install make
+      run: sudo apt-get update && sudo apt-get install -y make
+        
     - name: Run model tests
-      run: |
-        python -m pytest tests/model/ -v
+      run: make model-test
         
     - name: Run API tests
-      run: |
-        python -m pytest tests/api/ -v
-        
-    - name: Check code coverage
-      run: |
-        python -m pytest --cov=challenge --cov-report=xml
-        
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
+      run: make api-test

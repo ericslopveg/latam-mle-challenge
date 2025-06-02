@@ -23,7 +23,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install httpx==0.23.0 anyio==3.6.0
-        pip install jinja2==3.0.3 itsdangerous==2.0.1 flask==2.0.3 werkzeug==2.0.3
         pip install -r requirements-test.txt
         
     - name: Install make
